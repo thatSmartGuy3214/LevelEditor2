@@ -322,7 +322,7 @@ class Level_Editor:
         self.current_file = ""
         self.bounds = [0, 0, 10, 10] #left, top, right, bottom
         self.running = True
-        self.tilesize = 16
+        self.tilesize = 32
         self.auto_tile_data = {}
         self.snap_to_grid = False
 
@@ -334,7 +334,7 @@ class Level_Editor:
         self.min_zoom = 0.25
 
         # Tile stuff
-        self.tilesets = {}
+        self.tilesets = {"offsets": {}}
         self.current_tile = 0
         self.current_tileset = ""
         self.tileset_index = 0
@@ -409,7 +409,7 @@ class Level_Editor:
                     img = get_image(image, x*self.tilesize, y*self.tilesize, self.tilesize, self.tilesize)
                     self.tilesets[tileset][tile_id] = img
 
-                    btn = TileBtn(80+(((tile_id-1)%10)*img.get_width()*2*1.2), 20+(row*img.get_height()*2*1.1), pygame.transform.scale(img, (img.get_width()*2, img.get_height()*2)), tile_id)
+                    btn = TileBtn(80+(((tile_id-1)%10)*32*1.2), 20+(row*32*1.1), pygame.transform.scale(img, (32, 32)), tile_id)
                     self.tile_buttons[tileset].append(btn)
 
                     if tile_id % 10 == 0:
@@ -440,6 +440,8 @@ class Level_Editor:
                     tile = data[tile_id]
                     tile_img = get_image(image, tile["x"], tile["y"], tile["width"], tile["height"])
                     self.tilesets[tileset][tile_id] = tile_img
+                    self.tilesets["offsets"][tile_id] = tile["offset"]
+                    
 
                     btn = TileBtn(80+((tile_count%6)*tile_img.get_width()*2*1.2), 20+(row*tile_img.get_height()*2), pygame.transform.scale(tile_img, (tile_img.get_width()*2, tile_img.get_height()*2)), tile_id)
                     self.tile_buttons[tileset].append(btn)
@@ -629,7 +631,7 @@ class Level_Editor:
                     check = self.check_neighbours(pos)
                     
                     for tile in self.auto_tile_data:
-                        if check == self.auto_tile_data[str(tile)]:
+                        if check == sorted(self.auto_tile_data[str(tile)]) and tile != "exclude":
                             self.level[self.current_layer][tile_id][1] = int(tile)
     
     def del_selection(self):
@@ -835,6 +837,7 @@ class Level_Editor:
                             if not self.ctrl:
                                 if len(self.auto_tile_data) > 0:
                                     self.auto_tile()
+                                    print("auto tile")
                             else:
                                 self.load_auto_tile_rules()
                     
@@ -862,15 +865,16 @@ class Level_Editor:
                         if event.key == pygame.K_EQUALS:
                             if not (0 < self.zoom < 1):
                                 self.zoom += 1
-                                self.zoom = min(self.max_zoom, self.zoom)
+                                if self.zoom > self.max_zoom:
+                                    self.zoom = self.max_zoom
                             else:
                                 if self.zoom == self.min_zoom:
                                     self.zoom = 0.5
                                 elif self.zoom == 0.5:
                                     self.zoom = 1
                             
-                            self.scroll[0] *= self.zoom
-                            self.scroll[1] *= self.zoom
+                            #self.scroll[0] *= self.zoom
+                            #self.scroll[1] *= self.zoom
 
                         if event.key == pygame.K_MINUS:
                             self.zoom -= 1
@@ -879,8 +883,8 @@ class Level_Editor:
                             elif self.zoom < 0:
                                 self.zoom = self.min_zoom
                             
-                            self.scroll[0] /= self.zoom
-                            self.scroll[1] /= self.zoom
+                            #self.scroll[0] /= self.zoom
+                            #self.scroll[1] /= self.zoom
                     
                     if event.key == pygame.K_LEFT:
                         if len(self.tilesets) > 0:
@@ -1005,9 +1009,12 @@ class Level_Editor:
                         tile_id = f"{x}/{y}"
                         if tile_id in self.level[layer]:
                             tile = self.level[layer][tile_id]
+                            offset_x, offset_y = 0, 0
+                            if tile[1] in self.tilesets["offsets"]:
+                                offset_x, offset_y = self.tilesets["offsets"][tile[1]]
                             if (-(self.tilesize*self.zoom)*2 < tile[2][0]*self.tilesize*self.zoom-self.scroll[0] < surf.get_width()+self.tilesize*2) and (-(self.tilesize*self.zoom)*2 < tile[2][1]*self.tilesize*self.zoom-self.scroll[1] < surf.get_height()+self.tilesize*2):
                                 img = self.tilesets[tile[0]][tile[1]].copy()
-                                surf.blit(pygame.transform.scale(img, (img.get_width()*self.zoom, img.get_height()*self.zoom)), (tile[2][0]*self.tilesize*self.zoom-self.scroll[0], tile[2][1]*self.tilesize*self.zoom-self.scroll[1]))
+                                surf.blit(pygame.transform.scale(img, (img.get_width()*self.zoom, img.get_height()*self.zoom)), ((tile[2][0]*self.tilesize-offset_x)*self.zoom-self.scroll[0], (tile[2][1]*self.tilesize-offset_y)*self.zoom-self.scroll[1]))
 
             if (self.selecting and not self.moving_selection) or (self.selecting and self.object_mode):
                 width = tile_pos[0] - self.selection_pos[0] + 1
@@ -1109,7 +1116,7 @@ class Level_Editor:
                                 
 
                         img = self.tilesets[self.current_tileset][self.current_tile].copy()
-                        surf.blit(pygame.transform.scale(img, (img.get_width()*3, img.get_height()*3)), (20, 20))
+                        surf.blit(pygame.transform.scale(img, (48, 48)), (20, 20))
 
                 if not self.object_mode:
                     if self.current_tileset != "":

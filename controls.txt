@@ -1,0 +1,29 @@
+I forgot most of the keybinds in my level editor :'( , so this is just a little instruction manual to remind me of the different
+features the level editor has.
+
+Middle mouse btn - select
+CTRL + C - copy
+CTRL + V - paste
+If a selection is made, delete key to delete
+F5 - quicksave
+CTRL + S - Save as
+CTRL + Q - load auto tile auto tiling rules
+Q - Auto tile
+CTRL + T - load a tileset 
+CTRL + L - load level
+CTRL + F - flood fill
+CTRL + "=" - zoom in
+CTRL + "-" - zoom out
+T - Tile selection menu
+left arrow and right arrow - change tileset
+up arrow and down arrow - change layer
+Left Shift - Object Mode
+Mouse Wheel Scroll - change current tile
+
+Object mode keys:
+O - create object
+M - Move Mode (To move objects. Weird, I know)
+Left Click - Open Object Editor
+ESC - Close Object Editor
+Right Click - Delete object
+
