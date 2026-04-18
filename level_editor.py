@@ -318,17 +318,36 @@ class TileBtn(Button):
 
 class Level_Editor:
     def __init__(self):
-        self.level = {"background": {}, "decor": {}, "tiles": {}, "foreground":{}}
+        self.level = {
+            "background": {
+                "offgrid": {}
+                }, 
+
+            "decor": {
+                "offgrid": {}
+                },
+
+            "tiles": {
+                "offgrid": {}
+                }, 
+
+            "foreground": {
+                "offgrid": {}
+                }
+            }
+
         self.current_file = ""
         self.bounds = [0, 0, 10, 10] #left, top, right, bottom
         self.running = True
-        self.tilesize = 32
+        self.tilesize = 16
         self.auto_tile_data = {}
         self.snap_to_grid = False
+        self.off_grid_mode = False
+        self.off_grid_img = None
 
         # camera 
         self.scroll = [0, 0]
-        self.scroll_speed = 10
+        self.scroll_speed = 20
         self.zoom = 1
         self.max_zoom = 3
         self.min_zoom = 0.25
@@ -427,7 +446,6 @@ class Level_Editor:
 
             with open(filename, "r") as file:
                 data = json.load(file)
-                file.close()
             
             image = pygame.image.load(data["path"]).convert()
             image.set_colorkey((0, 0, 0))
@@ -443,7 +461,7 @@ class Level_Editor:
                     self.tilesets["offsets"][tile_id] = tile["offset"]
                     
 
-                    btn = TileBtn(80+((tile_count%6)*tile_img.get_width()*2*1.2), 20+(row*tile_img.get_height()*2), pygame.transform.scale(tile_img, (tile_img.get_width()*2, tile_img.get_height()*2)), tile_id)
+                    btn = TileBtn(80+((tile_count%6)*32*1.2), 20+(row*32), pygame.transform.scale(tile_img, (32, 32)), tile_id)
                     self.tile_buttons[tileset].append(btn)
 
                     if tile_count % 6 == 0 and tile_count != 0:
@@ -467,7 +485,8 @@ class Level_Editor:
 
         level["tilesets"] = []
         for tileset in self.tilesets:
-            level["tilesets"].append(self.tilesets[tileset]["path"])
+            if tileset != "offsets":
+                level["tilesets"].append(self.tilesets[tileset]["path"])
         
         level["bounds"] = {"left": self.bounds[0], "right": self.bounds[2], "top": self.bounds[1], "bottom": self.bounds[3]}
         level["size"] = [self.bounds[2]-self.bounds[0], self.bounds[3]-self.bounds[1]]
@@ -480,7 +499,7 @@ class Level_Editor:
         level["level"] = self.level.copy()
 
         with open(filename, "w") as file:
-            json.dump(level, file)
+            json.dump(level, file, indent='\t')
             file.close()
         print("saved file!!")
 
@@ -504,7 +523,7 @@ class Level_Editor:
 
     
     def load(self):
-        self.tilesets = {}
+        self.tilesets = {"offsets": {}}
         filename = f_dialog.askopenfilename(filetypes=[("level file", ".lvl")])
         if filename == '':
             print("failed to load file")
@@ -522,7 +541,6 @@ class Level_Editor:
         
         with open(filename, "r") as file:
             data = json.load(file)
-            file.close()
 
         self.bounds = [data["bounds"]["left"], data["bounds"]["top"], data["bounds"]["right"], data["bounds"]["bottom"]]
 
@@ -632,7 +650,10 @@ class Level_Editor:
                     
                     for tile in self.auto_tile_data:
                         if check == sorted(self.auto_tile_data[str(tile)]) and tile != "exclude":
-                            self.level[self.current_layer][tile_id][1] = int(tile)
+                            if self.tilesets[self.current_tileset]["type"] != "custom":
+                                self.level[self.current_layer][tile_id][1] = int(tile)
+                            else:
+                                self.level[self.current_layer][tile_id][1] = tile
     
     def del_selection(self):
         tile_pos = [int(self.selection_box.x/self.tilesize), int(self.selection_box.y/self.tilesize)]
@@ -773,29 +794,50 @@ class Level_Editor:
             if self.current_tileset != "":
                 if self.clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
                     if self.current_tile in self.tilesets[self.current_tileset]:
-                        if tile_id not in self.level:
-                            self.level[self.current_layer][tile_id] = []
+                        if not self.off_grid_mode:
+                            if tile_id not in self.level[self.current_layer]:
+                                self.level[self.current_layer][tile_id] = []
 
-                        if tile_pos[0] < self.bounds[0]:
-                            self.bounds[0] = tile_pos[0]
-                        elif tile_pos[0] > self.bounds[2]:
-                            self.bounds[2] = tile_pos[0]
+                            if tile_pos[0] < self.bounds[0]:
+                                self.bounds[0] = tile_pos[0]
+                            elif tile_pos[0] > self.bounds[2]:
+                                self.bounds[2] = tile_pos[0]
 
-                        if tile_pos[1] < self.bounds[1]:
-                            self.bounds[1] = tile_pos[1]
-                        elif tile_pos[1] > self.bounds[3]:
-                            self.bounds[3] = tile_pos[1]
+                            if tile_pos[1] < self.bounds[1]:
+                                self.bounds[1] = tile_pos[1]
+                            elif tile_pos[1] > self.bounds[3]:
+                                self.bounds[3] = tile_pos[1]
 
-                        tile = [self.current_tileset, self.current_tile, tile_pos]
-                        self.level[self.current_layer][tile_id] = tile
+                            tile = [self.current_tileset, self.current_tile, tile_pos]
+                            self.level[self.current_layer][tile_id] = tile
 
-                        if self.undone or self.redone:
-                            self.undo_logs.clear()
-                        
-                        self.undone = False
-                        self.redone = False
+                            if self.undone or self.redone:
+                                self.undo_logs.clear()
+                            
+                            self.undone = False
+                            self.redone = False
 
-                        self.log_data.append([self.current_layer, tile_id, tile])
+                            self.log_data.append([self.current_layer, tile_id, tile])
+                        else:
+
+                            if tile_id not in self.level[self.current_layer]["offgrid"]:
+                                self.level[self.current_layer]["offgrid"][tile_id] = []
+
+                            if tile_pos[0] < self.bounds[0]:
+                                self.bounds[0] = tile_pos[0]
+                            elif tile_pos[0] > self.bounds[2]:
+                                self.bounds[2] = tile_pos[0]
+
+                            if tile_pos[1] < self.bounds[1]:
+                                self.bounds[1] = tile_pos[1]
+                            elif tile_pos[1] > self.bounds[3]:
+                                self.bounds[3] = tile_pos[1]
+                            
+                            rect = self.tilesets[self.current_tileset][self.current_tile].get_rect()
+                            tile = [self.current_tileset, self.current_tile, [world_pos[0], world_pos[1], rect.width, rect.height]]
+                            self.level[self.current_layer]["offgrid"][tile_id].append(tile)
+
+                            
                 
                 if self.right_clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
 
@@ -805,10 +847,19 @@ class Level_Editor:
                     self.undone = False
                     self.redone = False
 
-                    if tile_id in self.level[self.current_layer]:
+                    if tile_id in self.level[self.current_layer] and not self.off_grid_mode:
                         self.log_data.append([self.current_layer, tile_id, self.level[self.current_layer][tile_id]])
 
                         del self.level[self.current_layer][tile_id]
+
+                    if self.off_grid_mode:
+                        for tile_id in self.level[self.current_layer]["offgrid"]:
+                            # Find the specific off grid tile to delete
+                            for i, tile in sorted(enumerate(self.level[self.current_layer]["offgrid"][tile_id]), reverse=True):
+                                rect = pygame.Rect(tile[2])
+
+                                if rect.collidepoint(world_pos):
+                                    self.level[self.current_layer]["offgrid"][tile_id].pop(i)
 
 
             
@@ -831,6 +882,11 @@ class Level_Editor:
                     
                     if event.key == pygame.K_F5: # quicksave
                         self.save(self.current_file)
+                    
+                    if event.key == pygame.K_F2: # toggle off grid mode
+                        self.off_grid_mode = not self.off_grid_mode
+                        self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
+                        self.off_grid_img.set_alpha(100)
                     
                     if event.key == pygame.K_q:
                         if not self.object_mode:
@@ -889,7 +945,7 @@ class Level_Editor:
                     if event.key == pygame.K_LEFT:
                         if len(self.tilesets) > 0:
                             self.tileset_index -= 1
-                            self.tileset_index = max(0, self.tileset_index) 
+                            self.tileset_index = max(1, self.tileset_index) 
                             self.current_tileset = list(self.tilesets.keys())[self.tileset_index]
                             if self.tilesets[self.current_tileset]["type"] == "normal":
                                 self.current_tile = 1
@@ -911,11 +967,19 @@ class Level_Editor:
                         self.layer_index += 1
                         self.layer_index = min(len(self.level)-1, self.layer_index)
                         self.current_layer = list(self.level.keys())[self.layer_index]
+
+                        if self.off_grid_mode:
+                            self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
+                            self.off_grid_img.set_alpha(100)
                     
                     if event.key == pygame.K_DOWN:
                         self.layer_index -= 1
                         self.layer_index = max(0, self.layer_index)
                         self.current_layer = list(self.level.keys())[self.layer_index]
+
+                        if self.off_grid_mode:
+                            self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
+                            self.off_grid_img.set_alpha(100)
                     
                     if event.key == pygame.K_LSHIFT:
                         self.object_mode = not self.object_mode
@@ -999,6 +1063,10 @@ class Level_Editor:
                             index = tile_ids.index(self.current_tile) - 1
                             index = max(0, index)
                             self.current_tile = tile_ids[index]
+                        
+                    if self.off_grid_mode:
+                        self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
+                        self.off_grid_img.set_alpha(100)
 
 
 
@@ -1013,8 +1081,16 @@ class Level_Editor:
                             if tile[1] in self.tilesets["offsets"]:
                                 offset_x, offset_y = self.tilesets["offsets"][tile[1]]
                             if (-(self.tilesize*self.zoom)*2 < tile[2][0]*self.tilesize*self.zoom-self.scroll[0] < surf.get_width()+self.tilesize*2) and (-(self.tilesize*self.zoom)*2 < tile[2][1]*self.tilesize*self.zoom-self.scroll[1] < surf.get_height()+self.tilesize*2):
-                                img = self.tilesets[tile[0]][tile[1]].copy()
+                                img = self.tilesets[tile[0]][tile[1]]
                                 surf.blit(pygame.transform.scale(img, (img.get_width()*self.zoom, img.get_height()*self.zoom)), ((tile[2][0]*self.tilesize-offset_x)*self.zoom-self.scroll[0], (tile[2][1]*self.tilesize-offset_y)*self.zoom-self.scroll[1]))
+
+                        if tile_id in self.level[layer]["offgrid"]:
+                            for tile in self.level[layer]["offgrid"][tile_id]:
+                                img = self.tilesets[tile[0]][tile[1]]
+                                surf.blit(pygame.transform.scale(img, (img.get_width()*self.zoom, img.get_height()*self.zoom)), (tile[2][0]*self.zoom-self.scroll[0], tile[2][1]*self.zoom-self.scroll[1]))
+
+            if self.off_grid_mode:
+                surf.blit(pygame.transform.scale(self.off_grid_img, (self.off_grid_img.get_width()*self.zoom, self.off_grid_img.get_height()*self.zoom)), m_pos)
 
             if (self.selecting and not self.moving_selection) or (self.selecting and self.object_mode):
                 width = tile_pos[0] - self.selection_pos[0] + 1

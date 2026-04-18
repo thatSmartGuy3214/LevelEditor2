@@ -1,0 +1,69 @@
+{
+	"path": "decor.png",
+	
+	"christmas_tree": {
+		"x": 176,
+		"y": 0,
+		"width": 64,
+		"height": 64,
+		"offset": [0, 0]
+	},
+	
+	"tree": {
+		"x": 0,
+		"y": 0,
+		"width": 176,
+		"height": 176,
+		"offset": [0, -16]
+	},
+	
+	"painting_1": {
+		"x": 176,
+		"y": 64,
+		"width": 80,
+		"height": 32,
+		"offset": [0, 0]
+	},
+	
+	"painting_2": {
+		"x": 176,
+		"y": 96,
+		"width": 80,
+		"height": 32,
+		"offset": [0, 0]
+	},
+	
+	"table_1": {
+		"x": 176,
+		"y": 128,
+		"width": 80,
+		"height": 32,
+		"offset": [0, 0]
+	},
+	
+	"table_2": {
+		"x": 176,
+		"y": 160,
+		"width": 80,
+		"height": 32,
+		"offset": [0, 0]
+	},
+	
+	"snowman_1": {
+		"x": 256,
+		"y": 0,
+		"width": 64,
+		"height": 64,
+		"offset": [0, 0]
+	},
+	
+	"snowman_2": {
+		"x": 256,
+		"y": 64,
+		"width": 64,
+		"height": 32,
+		"offset": [0, 0]
+	}
+	
+	
+}

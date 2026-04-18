@@ -1,0 +1,17 @@
+UI update and redesigning and rewriting a few things:
+- Tile selection pane/window (Basically, main UI for level editing)
+- Make mouse scroll wheel zoom in and out (while holding the ctrl key)
+- Rewrite zooming logic
+- Redesign object system
+ - Rewrite object editor (Settings will be in the the same pain as the tile selection and tileset selection)
+- Settings pane to allow myself to add more layers and modify the tilesize
+- Logging system (Allows me to redo and undo)
+ - Use two stacks
+ - One stack for storing changes
+ - One stack for storing undos
+ - If a change is made after undoing, clear the undo stack
+
+
+
+Done:
+- Off grid mode (Allows me to place assets not aligned to the grid) (Still needs some tweaking though)
