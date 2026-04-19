@@ -16,7 +16,10 @@ characters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "
 
 pretty_print_command = ["python", "-m", "json.tool", "--indent"]
 
-screen = pygame.display.set_mode((800, 500))
+WIDTH = 1000
+HEIGHT = 600
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 
 pygame.display.set_caption("PyLevel Editor")
@@ -107,21 +110,21 @@ class Button:
             self.rect = pygame.Rect(x, y, width, height)
             
 
-    def draw(self, surf):
+    def draw(self, surf, scroll=[0, 0]):
         if self.image != None:
-            surf.blit(self.image, (self.rect.x, self.rect.y))
+            surf.blit(self.image, (self.rect.x+scroll[0], self.rect.y+scroll[1]))
 
             if self.hover and self.outline_on_hover:
-                pygame.draw.rect(surf, self.hover_color, self.rect, 2)
+                pygame.draw.rect(surf, self.hover_color, (self.rect.x+scroll[0], self.rect.y+scroll[1], self.rect.width, self.rect.height), 2)
 
         else:
-            pygame.draw.rect(surf, self.btn_color, self.rect)
+            pygame.draw.rect(surf, self.btn_color, (self.rect.x+scroll[0], self.rect.y+scroll[1], self.rect.width, self.rect.height))
             if self.hover and self.outline_on_hover:
-                pygame.draw.rect(surf, self.hover_color, self.rect, 2)
+                pygame.draw.rect(surf, self.hover_color, (self.rect.x+scroll[0], self.rect.y+scroll[1], self.rect.width, self.rect.height), 2)
         
         if self.font != None:
             text = self.font.render(self.text, False, self.text_color)
-            blit_center(surf, text, self.rect.center)
+            blit_center(surf, text, (self.rect.centerx+scroll[0], self.rect.centery+scroll[1]))
 
     def update(self, mouse_pos):
         self.hover = False
@@ -316,6 +319,81 @@ class TileBtn(Button):
         super().__init__(x, y, None, image=image, hover_color=(255, 0, 0))
         self.tile = tile
 
+class UIPane():
+    def __init__(self, level_editor):
+        self.surf = pygame.Surface((WIDTH * 0.25, HEIGHT))
+        self.rect = self.surf.get_rect(topleft=(WIDTH - self.surf.get_width(), 0))
+
+        self.color = (120, 40, 220)
+        
+        self.level_editor = level_editor
+        self.font = pygame.font.SysFont("Arial", 25, True)
+        self.tilesize_input = TextInput([120, 66], "tilesize", self.font, 60)
+        self.tilesize_input.text = str(self.level_editor.tilesize)
+        self.was_input_selected = False
+        self.selected = False
+
+        self.scrollable_surf = pygame.Surface((self.surf.get_width() * 0.9, HEIGHT * 0.75))
+        self.scroll_y = 0
+
+        self.tile_buttons = {}
+        
+
+
+    def handle_events(self, m_pos, event):
+        pos = [m_pos[0]-self.rect.x, m_pos[1]-self.rect.y]
+        scrollable_pos = [m_pos[0]-self.rect.x-14, m_pos[1]-self.rect.y - (self.surf.get_height()-self.scrollable_surf.get_height()-20)-self.scroll_y]
+
+        self.tilesize_input.handle_event(pos, event)
+
+        if self.was_input_selected and not self.tilesize_input.selected:
+            self.level_editor.tilesize = int(self.tilesize_input.text)
+
+        self.was_input_selected = self.tilesize_input.selected
+
+        if self.rect.collidepoint(m_pos):
+            self.selected = True
+        else:
+            self.selected = False
+
+        if self.level_editor.current_tileset != "":
+            for btn in self.tile_buttons[self.level_editor.current_tileset]:
+                btn.update(scrollable_pos)
+
+                if btn.clicked:
+                    self.level_editor.current_tile = btn.tile
+
+
+        if event.type == pygame.MOUSEWHEEL:
+            if event.y == -1:
+                self.scroll_y -= 20
+            
+            if event.y == 1:
+                self.scroll_y += 20
+        
+
+    
+    def draw(self, surf):
+        self.surf.fill(self.color)
+        self.scrollable_surf.fill((0, 0, 0))
+        
+        text = self.font.render(self.level_editor.current_tileset, False, (255, 255, 255))
+        layer_text = self.font.render(self.level_editor.current_layer, False, (255, 255, 255))
+        self.surf.blit(text, (40, 8))
+        self.surf.blit(layer_text, (40, 35))
+        self.tilesize_input.draw(self.surf)
+
+        if self.level_editor.current_tileset != "":
+            for btn in self.tile_buttons[self.level_editor.current_tileset]:
+                btn.draw(self.scrollable_surf, [0, self.scroll_y])
+
+
+        self.surf.blit(self.scrollable_surf, (14, self.surf.get_height()-self.scrollable_surf.get_height()-20))
+
+
+        surf.blit(self.surf, self.rect.topleft)
+        
+
 class Level_Editor:
     def __init__(self):
         self.level = {
@@ -335,7 +413,8 @@ class Level_Editor:
                 "offgrid": {}
                 }
             }
-
+        
+        self.render_order = list(self.level.keys())
         self.current_file = ""
         self.bounds = [0, 0, 10, 10] #left, top, right, bottom
         self.running = True
@@ -405,6 +484,10 @@ class Level_Editor:
         self.saved = False
         self.save_display_timer = Timer(0.8)
 
+        # UI stuff
+        self.ui_pane = UIPane(self)
+
+
     def load_tileset(self, filename="", open_dialog=True):
         if open_dialog:
             filename = f_dialog.askopenfilename(filetypes=[("image", ".png"), ('json file', ".json")])
@@ -418,7 +501,7 @@ class Level_Editor:
             self.current_tile = 1
             tileset = filename.split('/')[-1].split(".")[0]
             self.tilesets[tileset] = {"type": "normal"}
-            self.tile_buttons[tileset] = []
+            self.ui_pane.tile_buttons[tileset] = []
             image = pygame.image.load(filename).convert()
             image.set_colorkey((0, 0, 0))
             tile_id = 1
@@ -428,10 +511,10 @@ class Level_Editor:
                     img = get_image(image, x*self.tilesize, y*self.tilesize, self.tilesize, self.tilesize)
                     self.tilesets[tileset][tile_id] = img
 
-                    btn = TileBtn(80+(((tile_id-1)%10)*32*1.2), 20+(row*32*1.1), pygame.transform.scale(img, (32, 32)), tile_id)
-                    self.tile_buttons[tileset].append(btn)
+                    btn = TileBtn(5+(((tile_id-1)%5)*32*1.2), 5+(row*32*1.1), pygame.transform.scale(img, (32, 32)), tile_id)
+                    self.ui_pane.tile_buttons[tileset].append(btn)
 
-                    if tile_id % 10 == 0:
+                    if tile_id % 5 == 0:
                         row += 1
 
                     tile_id += 1
@@ -440,7 +523,7 @@ class Level_Editor:
         elif ".json" in filename:
             tileset = filename.split('/')[-1].split(".")[0]
             self.tilesets[tileset] = {"type": "custom"}
-            self.tile_buttons[tileset] = []
+            self.ui_pane.tile_buttons[tileset] = []
 
             self.current_tileset = tileset
 
@@ -461,10 +544,10 @@ class Level_Editor:
                     self.tilesets["offsets"][tile_id] = tile["offset"]
                     
 
-                    btn = TileBtn(80+((tile_count%6)*32*1.2), 20+(row*32), pygame.transform.scale(tile_img, (32, 32)), tile_id)
-                    self.tile_buttons[tileset].append(btn)
+                    btn = TileBtn(5+((tile_count%5)*32*1.2), 5+(row*32), pygame.transform.scale(tile_img, (32, 32)), tile_id)
+                    self.ui_pane.tile_buttons[tileset].append(btn)
 
-                    if tile_count % 6 == 0 and tile_count != 0:
+                    if tile_count % 5 == 0 and tile_count != 0:
                         row += 1
                     
                     tile_count += 1
@@ -492,6 +575,7 @@ class Level_Editor:
         level["size"] = [self.bounds[2]-self.bounds[0], self.bounds[3]-self.bounds[1]]
         level["auto_tile_rules"] = self.auto_tile_data
         level["objects"] = []
+        level["tilesize"] = self.tilesize
 
         for obj in self.objects:
             level["objects"].append(obj.to_data())
@@ -543,6 +627,8 @@ class Level_Editor:
             data = json.load(file)
 
         self.bounds = [data["bounds"]["left"], data["bounds"]["top"], data["bounds"]["right"], data["bounds"]["bottom"]]
+        self.tilesize = data["tilesize"]
+        self.ui_pane.tilesize_input.text = str(self.tilesize)
 
         for tileset in data["tilesets"]:
             self.load_tileset(tileset, open_dialog=False)
@@ -791,81 +877,84 @@ class Level_Editor:
 
             tile_id = f"{tile_pos[0]}/{tile_pos[1]}"
 
-            if self.current_tileset != "":
-                if self.clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
-                    if self.current_tile in self.tilesets[self.current_tileset]:
-                        if not self.off_grid_mode:
-                            if tile_id not in self.level[self.current_layer]:
-                                self.level[self.current_layer][tile_id] = []
+            if not self.ui_pane.selected:
+                if self.current_tileset != "":
+                    if self.clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
+                        if self.current_tile in self.tilesets[self.current_tileset]:
+                            if not self.off_grid_mode:
+                                if tile_id not in self.level[self.current_layer]:
+                                    self.level[self.current_layer][tile_id] = []
 
-                            if tile_pos[0] < self.bounds[0]:
-                                self.bounds[0] = tile_pos[0]
-                            elif tile_pos[0] > self.bounds[2]:
-                                self.bounds[2] = tile_pos[0]
+                                if tile_pos[0] < self.bounds[0]:
+                                    self.bounds[0] = tile_pos[0]
+                                elif tile_pos[0] > self.bounds[2]:
+                                    self.bounds[2] = tile_pos[0]
 
-                            if tile_pos[1] < self.bounds[1]:
-                                self.bounds[1] = tile_pos[1]
-                            elif tile_pos[1] > self.bounds[3]:
-                                self.bounds[3] = tile_pos[1]
+                                if tile_pos[1] < self.bounds[1]:
+                                    self.bounds[1] = tile_pos[1]
+                                elif tile_pos[1] > self.bounds[3]:
+                                    self.bounds[3] = tile_pos[1]
 
-                            tile = [self.current_tileset, self.current_tile, tile_pos]
-                            self.level[self.current_layer][tile_id] = tile
+                                tile = [self.current_tileset, self.current_tile, tile_pos]
+                                self.level[self.current_layer][tile_id] = tile
 
-                            if self.undone or self.redone:
-                                self.undo_logs.clear()
+                                if self.undone or self.redone:
+                                    self.undo_logs.clear()
+                                
+                                self.undone = False
+                                self.redone = False
+
+                                self.log_data.append([self.current_layer, tile_id, tile])
+                            else:
+
+                                if tile_id not in self.level[self.current_layer]["offgrid"]:
+                                    self.level[self.current_layer]["offgrid"][tile_id] = []
+
+                                if tile_pos[0] < self.bounds[0]:
+                                    self.bounds[0] = tile_pos[0]
+                                elif tile_pos[0] > self.bounds[2]:
+                                    self.bounds[2] = tile_pos[0]
+
+                                if tile_pos[1] < self.bounds[1]:
+                                    self.bounds[1] = tile_pos[1]
+                                elif tile_pos[1] > self.bounds[3]:
+                                    self.bounds[3] = tile_pos[1]
+                                
+                                rect = self.tilesets[self.current_tileset][self.current_tile].get_rect()
+                                tile = [self.current_tileset, self.current_tile, [world_pos[0], world_pos[1], rect.width, rect.height]]
+                                self.level[self.current_layer]["offgrid"][tile_id].append(tile)
+
+                                
+                    
+                    if self.right_clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
+
+                        if self.undone or self.redone:
+                            self.undo_logs.clear()
                             
-                            self.undone = False
-                            self.redone = False
+                        self.undone = False
+                        self.redone = False
 
-                            self.log_data.append([self.current_layer, tile_id, tile])
-                        else:
+                        if tile_id in self.level[self.current_layer] and not self.off_grid_mode:
+                            self.log_data.append([self.current_layer, tile_id, self.level[self.current_layer][tile_id]])
 
-                            if tile_id not in self.level[self.current_layer]["offgrid"]:
-                                self.level[self.current_layer]["offgrid"][tile_id] = []
+                            del self.level[self.current_layer][tile_id]
 
-                            if tile_pos[0] < self.bounds[0]:
-                                self.bounds[0] = tile_pos[0]
-                            elif tile_pos[0] > self.bounds[2]:
-                                self.bounds[2] = tile_pos[0]
+                        if self.off_grid_mode:
+                            for tile_id in self.level[self.current_layer]["offgrid"]:
+                                # Find the specific off grid tile to delete
+                                for i, tile in sorted(enumerate(self.level[self.current_layer]["offgrid"][tile_id]), reverse=True):
+                                    rect = pygame.Rect(tile[2])
 
-                            if tile_pos[1] < self.bounds[1]:
-                                self.bounds[1] = tile_pos[1]
-                            elif tile_pos[1] > self.bounds[3]:
-                                self.bounds[3] = tile_pos[1]
-                            
-                            rect = self.tilesets[self.current_tileset][self.current_tile].get_rect()
-                            tile = [self.current_tileset, self.current_tile, [world_pos[0], world_pos[1], rect.width, rect.height]]
-                            self.level[self.current_layer]["offgrid"][tile_id].append(tile)
-
-                            
-                
-                if self.right_clicking and not self.moving_selection and not self.object_mode and not self.tile_selection_mode:
-
-                    if self.undone or self.redone:
-                        self.undo_logs.clear()
-                        
-                    self.undone = False
-                    self.redone = False
-
-                    if tile_id in self.level[self.current_layer] and not self.off_grid_mode:
-                        self.log_data.append([self.current_layer, tile_id, self.level[self.current_layer][tile_id]])
-
-                        del self.level[self.current_layer][tile_id]
-
-                    if self.off_grid_mode:
-                        for tile_id in self.level[self.current_layer]["offgrid"]:
-                            # Find the specific off grid tile to delete
-                            for i, tile in sorted(enumerate(self.level[self.current_layer]["offgrid"][tile_id]), reverse=True):
-                                rect = pygame.Rect(tile[2])
-
-                                if rect.collidepoint(world_pos):
-                                    self.level[self.current_layer]["offgrid"][tile_id].pop(i)
+                                    if rect.collidepoint(world_pos):
+                                        self.level[self.current_layer]["offgrid"][tile_id].pop(i)
 
 
             
             # Event handling
             for event in pygame.event.get():
                 
+                self.ui_pane.handle_events(m_pos, event)
+
                 if self.obj_editor.open:
                     self.obj_editor.handle_events(event)
 
@@ -897,9 +986,11 @@ class Level_Editor:
                             else:
                                 self.load_auto_tile_rules()
                     
+                    """
                     if event.key == pygame.K_t:
                         if not self.ctrl and not self.object_mode:
                             self.tile_selection_mode = not self.tile_selection_mode
+                    """
                     
                     if self.ctrl:
                         if event.key == pygame.K_s:
@@ -1039,34 +1130,35 @@ class Level_Editor:
                     if event.key == pygame.K_LCTRL:
                         self.ctrl = False
                 
-                if event.type == pygame.MOUSEWHEEL:
-                    if event.y == -1:
-                        if self.tilesets[self.current_tileset]["type"] == "normal":
-                            tile_ids = list(self.tilesets[self.current_tileset].keys())
-                            tile_ids = tile_ids[1:len(tile_ids)-1]
-                            self.current_tile += 1
-                            self.current_tile = min(self.current_tile, max(tile_ids))
-                        elif self.tilesets[self.current_tileset]["type"] == "custom":
-                            tile_ids = list(self.tilesets[self.current_tileset].keys())
-                            tile_ids = tile_ids[1:len(tile_ids)-1]
-                            index = tile_ids.index(self.current_tile) + 1
-                            index = min(len(tile_ids)-1, index)
-                            self.current_tile = tile_ids[index]
+                if not self.ui_pane.selected:
+                    if event.type == pygame.MOUSEWHEEL:
+                        if event.y == -1:
+                            if self.tilesets[self.current_tileset]["type"] == "normal":
+                                tile_ids = list(self.tilesets[self.current_tileset].keys())
+                                tile_ids = tile_ids[1:len(tile_ids)-1]
+                                self.current_tile += 1
+                                self.current_tile = min(self.current_tile, max(tile_ids))
+                            elif self.tilesets[self.current_tileset]["type"] == "custom":
+                                tile_ids = list(self.tilesets[self.current_tileset].keys())
+                                tile_ids = tile_ids[1:len(tile_ids)-1]
+                                index = tile_ids.index(self.current_tile) + 1
+                                index = min(len(tile_ids)-1, index)
+                                self.current_tile = tile_ids[index]
 
-                    if event.y == 1:
-                        if self.tilesets[self.current_tileset]["type"] == "normal":
-                            self.current_tile -= 1
-                            self.current_tile = max(1, self.current_tile)
-                        elif self.tilesets[self.current_tileset]["type"] == "custom":
-                            tile_ids = list(self.tilesets[self.current_tileset].keys())
-                            tile_ids = tile_ids[1:len(tile_ids)-1]
-                            index = tile_ids.index(self.current_tile) - 1
-                            index = max(0, index)
-                            self.current_tile = tile_ids[index]
-                        
-                    if self.off_grid_mode:
-                        self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
-                        self.off_grid_img.set_alpha(100)
+                        if event.y == 1:
+                            if self.tilesets[self.current_tileset]["type"] == "normal":
+                                self.current_tile -= 1
+                                self.current_tile = max(1, self.current_tile)
+                            elif self.tilesets[self.current_tileset]["type"] == "custom":
+                                tile_ids = list(self.tilesets[self.current_tileset].keys())
+                                tile_ids = tile_ids[1:len(tile_ids)-1]
+                                index = tile_ids.index(self.current_tile) - 1
+                                index = max(0, index)
+                                self.current_tile = tile_ids[index]
+                            
+                        if self.off_grid_mode:
+                            self.off_grid_img = self.tilesets[self.current_tileset][self.current_tile].copy()
+                            self.off_grid_img.set_alpha(100)
 
 
 
@@ -1122,7 +1214,7 @@ class Level_Editor:
 
                 # Render tiles in this surface
                 pos = [int(self.selection_box.x/self.tilesize), int(self.selection_box.y/self.tilesize)]
-                for layer in self.level:
+                for layer in self.render_order:
                     self.selected_tiles[layer] = {}
                     for y in range(int(self.selection_box.height/self.tilesize)):
                         for x in range(int(self.selection_box.width/self.tilesize)):
@@ -1178,6 +1270,8 @@ class Level_Editor:
                 filename = self.current_file.split("/")[-1]
                 text = self.font1.render(f"{filename} was saved!!", False, (255, 255, 255))
                 surf.blit(text, (surf.get_width()-text.get_width()-20, 20))
+            
+            self.ui_pane.draw(surf)
 
             try:
                 if self.current_tileset != "":
